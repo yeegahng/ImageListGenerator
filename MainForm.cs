@@ -28,6 +28,7 @@ namespace ImageListGenerator
 		
 		private List<String> FilenameList = new List<String>();
 		private String CurrentWorkingDirectory = null;
+		private bool IsFileListAcquired = false;
 		
 		public MainForm()
 		{
@@ -86,10 +87,11 @@ namespace ImageListGenerator
 		foreach(System.IO.FileInfo f in di.GetFiles())
 		listBox1.Items.Add(f.Name + "  " + f.Extension)
 		*/
-		public bool GenerateFileListFromFolder()
+		public bool GenerateFileListFromFolder(String initialTargetPath)
 		{
 			FolderBrowserDialog folderDlg = new FolderBrowserDialog();
-			folderDlg.Description = "Select Folder with files to enlist";		
+			folderDlg.Description = "Select Folder with files to enlist";
+			
 			if(folderDlg.ShowDialog() != DialogResult.OK)
 			{
 				return false;
@@ -105,16 +107,22 @@ namespace ImageListGenerator
 			return true;
 		}
 		
-		public bool GenerateFileListFromFiles()
+		public bool GenerateFileListFromFiles(String initialTargetPath)
 		{
 			OpenFileDialog fileDlg = new OpenFileDialog();
 			fileDlg.Filter = "JPG Files(*.jpg)|*.jpg|PNG Files(*.png)|*.png|All Files(*.*)|*.*";
 			fileDlg.Multiselect = true;
 			fileDlg.Title = "Select Files to enlist";
-			if(CurrentWorkingDirectory != null)
+			
+			if(initialTargetPath != null)
+			{
+				fileDlg.InitialDirectory = initialTargetPath;
+			}			
+			else if(CurrentWorkingDirectory != null)
 			{
 				fileDlg.InitialDirectory = CurrentWorkingDirectory;
 			}
+			
 			if (fileDlg.ShowDialog() != DialogResult.OK )
 			{
 				return false;
@@ -132,51 +140,81 @@ namespace ImageListGenerator
 		
 		private void GenerateFileList(SourceType sourceType)
 		{
-			bool IsFileListImported = false;
+			this.IsFileListAcquired = false;
+			
+			//At the moment of searching path, a prewritten path is checked its validity if exists.
+			String initialTargetPath = null;
+			if(textBox_TargetPath.Text.Length > 0)
+			{
+				if(new DirectoryInfo(textBox_TargetPath.Text).Exists)
+				{
+					initialTargetPath = textBox_TargetPath.Text;
+				}
+			}
+			
 			switch(sourceType)
 			{
 				case SourceType.Folder:
-					IsFileListImported = GenerateFileListFromFolder();
+					this.IsFileListAcquired = GenerateFileListFromFolder(initialTargetPath);
 					break;
 				case SourceType.Files:
-					IsFileListImported = GenerateFileListFromFiles();
+					this.IsFileListAcquired = GenerateFileListFromFiles(initialTargetPath);
 					break;
 				default:
 					break;
 			}
 			
-			if(IsFileListImported)
+			textBox_TargetPath.Text = CurrentWorkingDirectory;
+			
+			MessageBox.Show("Generating File List " + (this.IsFileListAcquired ? "was successful." : "failed."));
+		}
+		
+		private void SaveOutputListFile()
+		{
+			if(this.IsFileListAcquired)
 			{
-				//String quotationMarkOpen, quotationMarkClose;
-				//GetQuotationMark(out quotationMarkOpen, out quotationMarkClose);
 				String[] filepathList = FilenameList.ToArray();
 				for(int i = 0; i<filepathList.Length; i++)
 				{
 					filepathList[i] = this.textBox_Prefix.Text + filepathList[i] + this.textBox_Suffix.Text;
 				}
 				
-				SaveOutputListFile(filepathList);
+				SaveFileDialog outputSaveFileDlg = new SaveFileDialog();
+				if(CurrentWorkingDirectory != null)
+				{
+					outputSaveFileDlg.InitialDirectory = CurrentWorkingDirectory;
+				}
+				outputSaveFileDlg.DefaultExt = "txt";
+				outputSaveFileDlg.Filter = "Text File(*.txt)|*.txt|HTML File(*.html)|*.html|All Files(*.*)|*.*";
+				outputSaveFileDlg.CheckFileExists = false;	//new creation is allowed
+				outputSaveFileDlg.CheckPathExists = false;	//new creation is allowed
+				if(outputSaveFileDlg.ShowDialog() != DialogResult.OK)
+				{
+					return;
+				}
+
+				File.WriteAllLines(outputSaveFileDlg.FileName, filepathList, Encoding.Default);
+				//File.AppendAllText(outputSaveFileDlg.FileName, filepathList, Encoding.Default);
+			}
+			else
+			{
+				MessageBox.Show("[Error] Select target file(s) before generating list and saving output. Command rejected.");
 			}
 		}
 		
-		private void SaveOutputListFile(String[] filepathList)
+		private void UpdateExampleOutput()
 		{
-			OpenFileDialog outputSaveFileDlg = new OpenFileDialog();
-			if(CurrentWorkingDirectory != null)
+			String exampleText = "Example) " + this.textBox_Prefix.Text;
+			if(this.IsFileListAcquired)
 			{
-				outputSaveFileDlg.InitialDirectory = CurrentWorkingDirectory;
+				exampleText += FilenameList[0].ToString();
 			}
-			outputSaveFileDlg.DefaultExt = "txt";
-			outputSaveFileDlg.CheckFileExists = false;	//new creation is allowed
-			outputSaveFileDlg.CheckPathExists = false;	//new creation is allowed
-			if(outputSaveFileDlg.ShowDialog() != DialogResult.OK)
+			else
 			{
-				return;
+				exampleText += "../images/sample.jpg";
 			}
-
-			
-			File.WriteAllLines(outputSaveFileDlg.FileName, filepathList, Encoding.Default);
-			//File.AppendAllText(outputSaveFileDlg.FileName, filepathList, Encoding.Default);
+			exampleText += this.textBox_Suffix.Text;
+			this.label_Example.Text = exampleText;
 		}
 		
 		void ListFromFolderToolStripMenuItemClick(object sender, EventArgs e)
@@ -187,6 +225,16 @@ namespace ImageListGenerator
 		void ListFromFilesToolStripMenuItemClick(object sender, EventArgs e)
 		{
 			GenerateFileList(SourceType.Files);
+		}
+		
+		void TextBox_PrefixSuffixChanged(object sender, EventArgs e)
+		{
+			UpdateExampleOutput();
+		}
+		
+		void Button_GenerateListFileClick(object sender, EventArgs e)
+		{
+			SaveOutputListFile();
 		}
 	}
 }
